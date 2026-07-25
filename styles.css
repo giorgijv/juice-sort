@@ -169,30 +169,36 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Pivot near the base: the bottle tips over its own heel, like real glass. */
   transform-origin: 50% 88%;
-  transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.22, 0.9, 0.3, 1);
 }
 
 .bottle.selected {
-  transform: translateY(-10px);
+  transform: translateY(-12px);
+}
+
+.bottle.selected .bottle-body {
+  box-shadow:
+    inset -6px 0 10px rgba(0, 0, 0, 0.25),
+    inset 6px 0 10px rgba(255, 255, 255, 0.03),
+    0 10px 22px rgba(0, 0, 0, 0.35);
 }
 
 .bottle.invalid {
   animation: shake 0.35s ease;
 }
 
-.bottle.tilt-right {
-  transform: rotate(66deg) translate(10px, -6px);
-  z-index: 6;
-}
-
-.bottle.tilt-left {
-  transform: rotate(-66deg) translate(-10px, -6px);
-  z-index: 6;
+/* While a pour is choreographed, the bottle is driven by the Web Animations
+   API -- no CSS transition should fight it for control of `transform`. */
+.bottle.in-flight {
+  transition: none;
+  z-index: 46;
+  will-change: transform;
 }
 
 .bottle.pouring .bottle-neck {
-  box-shadow: 0 0 10px 2px rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 12px 3px rgba(255, 255, 255, 0.4);
 }
 
 @keyframes shake {
@@ -203,47 +209,65 @@ html, body {
   80% { transform: translateX(4px); }
 }
 
-/* Liquid stream arcing between bottles while a pour is animating. */
-.pour-stream {
+/* ---------- Pouring stream ----------
+   A full-viewport SVG overlay. The stream path is recomputed every frame
+   against the live (animating) neck positions, so it stays welded to the
+   bottle mouth no matter where the pour choreography has moved it. */
+#pourLayer {
   position: fixed;
-  width: 5px;
-  border-radius: 3px;
-  opacity: 0;
-  pointer-events: none;
-  z-index: 40;
-  transform-origin: 0 0;
-  transition: opacity 0.15s ease;
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.45);
-}
-
-.pour-stream.active {
-  opacity: 0.95;
-}
-
-.pour-stream::after {
-  content: "";
-  position: absolute;
   inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 55%);
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 45;
+  overflow: visible;
+}
+
+.stream-body {
+  fill: none;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.35));
+}
+
+.stream-gloss {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.7);
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
 @keyframes pourUnitExit {
   from { height: var(--unit-h); opacity: 1; }
-  to { height: 0; opacity: 0.5; }
+  to { height: 0; opacity: 0.45; }
 }
 
+/* `both` fill mode matters: with staggered per-unit delays, each unit must
+   hold its start state until its turn comes, then hold its end state after. */
 .pour-unit-exit {
-  animation: pourUnitExit var(--pour-dur, 380ms) ease forwards;
+  animation: pourUnitExit var(--pour-dur, 380ms) cubic-bezier(0.55, 0, 0.5, 1) both;
 }
 
 @keyframes pourUnitEnter {
-  from { height: 0; opacity: 0.5; }
+  from { height: 0; opacity: 0.45; }
   to { height: var(--unit-h); opacity: 1; }
 }
 
 .pour-unit-enter {
-  animation: pourUnitEnter var(--pour-dur, 380ms) ease forwards;
+  animation: pourUnitEnter var(--pour-dur, 380ms) cubic-bezier(0.3, 0.5, 0.4, 1) both;
+}
+
+/* Liquid settling in the receiving bottle once the pour lands. */
+@keyframes settleWobble {
+  0%   { transform: scaleY(1.16) translateY(-2px); }
+  35%  { transform: scaleY(0.94) translateY(1px); }
+  62%  { transform: scaleY(1.05); }
+  82%  { transform: scaleY(0.98); }
+  100% { transform: scaleY(1); }
+}
+
+.unit.settle {
+  transform-origin: 50% 100%;
+  animation: settleWobble 620ms cubic-bezier(0.3, 0.8, 0.4, 1);
 }
 
 .bottle-neck {
@@ -252,22 +276,51 @@ html, body {
   background: var(--glass-fill);
   border: 2px solid var(--glass-border);
   border-bottom: none;
-  border-radius: 4px 4px 0 0;
+  border-radius: 5px 5px 0 0;
+  position: relative;
+}
+
+/* Glass rim catching the light. */
+.bottle-neck::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.45);
 }
 
 .bottle-body {
+  position: relative;
   width: 62px;
   border: 2px solid var(--glass-border);
   border-top: none;
-  border-radius: 0 0 16px 16px;
+  border-radius: 0 0 17px 17px;
   background: var(--glass-fill);
   display: flex;
   flex-direction: column-reverse;
   overflow: hidden;
-  box-shadow: inset -6px 0 10px rgba(0,0,0,0.25), inset 6px 0 10px rgba(255,255,255,0.03);
+  height: calc(var(--unit-h) * var(--capacity, 4));
+  box-shadow:
+    inset -7px 0 12px rgba(0, 0, 0, 0.28),
+    inset 7px 0 12px rgba(255, 255, 255, 0.04);
 }
 
-.bottle-body { height: calc(var(--unit-h) * var(--capacity, 4)); }
+/* Specular highlight down the left face of the glass. */
+.bottle-body::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 10px;
+  left: 8px;
+  width: 6px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.05));
+  z-index: 3;
+  pointer-events: none;
+}
 
 .bottle.long-bottle { --unit-h: 20px; }
 .bottle.long-bottle .bottle-body { width: 74px; }
@@ -280,11 +333,31 @@ html, body {
   position: relative;
 }
 
+/* Depth: light gathers at the top of each band, shadow pools at the bottom. */
 .unit::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0) 40%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0) 42%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0) 30%);
+}
+
+/* Meniscus on the topmost band of liquid. */
+.bottle-body > .unit:last-child {
+  border-radius: 6px 6px 0 0;
+}
+
+.bottle-body > .unit:last-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  border-radius: 6px 6px 0 0;
+  background: rgba(255, 255, 255, 0.42);
+  z-index: 2;
 }
 
 .cork {

@@ -35,6 +35,11 @@
   let won = false;
   let animating = false;
   let pendingPourTimeouts = [];
+  let activeAnimations = [];
+  let activeRaf = 0;
+  // Bumped whenever a pour is superseded (new game, restart, menu). In-flight
+  // callbacks compare against it and bail rather than mutating a fresh board.
+  let pourToken = 0;
 
   // ---------- DOM ----------
   const menuScreen = document.getElementById("menuScreen");
@@ -46,6 +51,7 @@
   const winOverlay = document.getElementById("winOverlay");
   const winStats = document.getElementById("winStats");
   const undoBtn = document.getElementById("undoBtn");
+  const pourLayer = document.getElementById("pourLayer");
 
   document.querySelectorAll(".diff-card").forEach((btn) => {
     btn.addEventListener("click", () => startGame(btn.dataset.diff));
@@ -195,10 +201,17 @@
   }
 
   function clearAnimationArtifacts() {
+    pourToken++;
     animating = false;
     pendingPourTimeouts.forEach((id) => clearTimeout(id));
     pendingPourTimeouts = [];
-    document.querySelectorAll(".pour-stream").forEach((el) => el.remove());
+    activeAnimations.forEach((a) => { try { a.cancel(); } catch (e) { /* already gone */ } });
+    activeAnimations = [];
+    if (activeRaf) { cancelAnimationFrame(activeRaf); activeRaf = 0; }
+    if (pourLayer) pourLayer.textContent = "";
+    document.querySelectorAll(".bottle.in-flight, .bottle.pouring").forEach((el) => {
+      el.classList.remove("in-flight", "pouring");
+    });
   }
 
   function startGame(diffKey) {
@@ -372,93 +385,220 @@
     }
   }
 
-  // Animates the liquid visibly flowing from `fromIdx` into `toIdx` -- tilting
-  // the source bottle, tracing a stream between the two necks, draining the
-  // source's top units and filling the destination's -- then commits the real
-  // state change once the animation finishes, so the final render lines up
-  // exactly with where the animation left off.
+  // Fraction of the timeline where liquid is actually in the air. Before this
+  // the bottle is lifting and travelling; after it, righting and returning.
+  const POUR_FROM = 0.5;
+  const POUR_TO = 0.79;
+  const TILT_DEG = 58;
+
+  function prefersReducedMotion() {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+
+  // Commits the logical pour and re-renders. Shared by the animated path and
+  // the no-animation fallback so both end in exactly the same state.
+  function commitPour(fromIdx, toIdx) {
+    pour(fromIdx, toIdx);
+    animating = false;
+    render();
+    settleTopUnit(toIdx);
+    if (isWin()) {
+      won = true;
+      setTimeout(showWin, 260);
+    }
+  }
+
+  // Gives the liquid that just landed a short wobble, so it reads as settling
+  // rather than snapping into place.
+  function settleTopUnit(idx) {
+    const body = document.querySelector(`.bottle[data-index="${idx}"] .bottle-body`);
+    const top = body && body.lastElementChild;
+    if (!top) return;
+    top.classList.add("settle");
+    pendingPourTimeouts.push(setTimeout(() => top.classList.remove("settle"), 640));
+  }
+
+  // Draws the falling stream for the duration of the pour. Runs off rAF and
+  // re-reads both necks every frame: the source bottle is still being animated
+  // underneath, so a path computed once would visibly detach from the mouth.
+  function runStream(srcEl, dstEl, color, duration, token) {
+    if (!pourLayer) return;
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const body = document.createElementNS(SVG_NS, "path");
+    body.setAttribute("class", "stream-body");
+    body.setAttribute("stroke", color);
+    const gloss = document.createElementNS(SVG_NS, "path");
+    gloss.setAttribute("class", "stream-gloss");
+    pourLayer.appendChild(body);
+    pourLayer.appendChild(gloss);
+
+    const srcNeck = srcEl.querySelector(".bottle-neck");
+    const dstNeck = dstEl.querySelector(".bottle-neck");
+    const started = performance.now();
+
+    const frame = (now) => {
+      if (token !== pourToken) return;
+      const t = Math.min(1, (now - started) / duration);
+
+      const s = srcNeck.getBoundingClientRect();
+      const d = dstNeck.getBoundingClientRect();
+      const x1 = s.left + s.width / 2;
+      const y1 = s.top + s.height / 2;
+      const x2 = d.left + d.width / 2;
+      const y2 = d.top + 5;
+      const dir = x2 >= x1 ? 1 : -1;
+
+      // Liquid leaves the lip sideways, then gravity pulls it into a near
+      // vertical drop just above the receiving mouth.
+      const drop = Math.max(30, (y2 - y1) * 0.55);
+      const path = `M ${x1} ${y1} C ${x1 + dir * 34} ${y1 + 12}, ${x2} ${y2 - drop}, ${x2} ${y2}`;
+      body.setAttribute("d", path);
+      gloss.setAttribute("d", path);
+
+      // Stream reaches downward at the start and thins out at the end.
+      const grow = Math.min(1, t / 0.16);
+      const fade = t > 0.84 ? Math.max(0, 1 - (t - 0.84) / 0.16) : 1;
+      const len = body.getTotalLength() || 1;
+      const dash = len * (1 - grow);
+      body.style.strokeDasharray = len;
+      body.style.strokeDashoffset = dash;
+      gloss.style.strokeDasharray = len;
+      gloss.style.strokeDashoffset = dash;
+      body.style.strokeWidth = 5.5 + 2 * fade;
+      body.style.opacity = fade;
+      gloss.style.opacity = fade * 0.8;
+
+      if (t < 1) {
+        activeRaf = requestAnimationFrame(frame);
+      } else {
+        body.remove();
+        gloss.remove();
+        activeRaf = 0;
+      }
+    };
+    activeRaf = requestAnimationFrame(frame);
+  }
+
+  // Choreographs a pour as one continuous motion: the bottle lifts out of its
+  // slot, carries over to the target, tips, empties (tipping a little further
+  // as it drains, the way a real bottle does), then rights itself and glides
+  // back. The logical state change is committed only once the motion ends, so
+  // the final render matches exactly where the animation left the board.
   function animatePourThenCommit(fromIdx, toIdx) {
     const src = bottles[fromIdx];
     const dst = bottles[toIdx];
-    const topColor = src.units[src.units.length - 1];
+    const color = src.units[src.units.length - 1];
     const amount = Math.min(topRunLength(src), dst.capacity - dst.units.length);
 
     animating = true;
     selected = -1;
     render();
 
+    const token = ++pourToken;
     const srcEl = document.querySelector(`.bottle[data-index="${fromIdx}"]`);
     const dstEl = document.querySelector(`.bottle[data-index="${toIdx}"]`);
-    if (!srcEl || !dstEl) {
-      // DOM somehow not ready -- fall back to an instant, unanimated pour.
-      pour(fromIdx, toIdx);
-      animating = false;
-      render();
-      if (isWin()) { won = true; setTimeout(showWin, 250); }
+    if (!srcEl || !dstEl || typeof srcEl.animate !== "function") {
+      commitPour(fromIdx, toIdx);
       return;
     }
 
+    const total = prefersReducedMotion() ? 260 : Math.min(2300, 1450 + amount * 170);
+    const pourStart = total * POUR_FROM;
+    const pourDur = total * (POUR_TO - POUR_FROM);
+
     const srcRect = srcEl.getBoundingClientRect();
     const dstRect = dstEl.getBoundingClientRect();
-    const tiltClass = (dstRect.left + dstRect.width / 2) < (srcRect.left + srcRect.width / 2) ? "tilt-left" : "tilt-right";
-    srcEl.classList.add(tiltClass);
-    srcEl.classList.add("pouring");
+    const dstNeckRect = dstEl.querySelector(".bottle-neck").getBoundingClientRect();
 
-    const pourDurationMs = Math.min(900, 380 + amount * 90);
+    // Approach from whichever side the source already sits on, and tip toward
+    // the target: pouring "outward" past the target would look wrong.
+    const sign = (srcRect.left + srcRect.width / 2) <= (dstRect.left + dstRect.width / 2) ? 1 : -1;
+    const rot = sign * TILT_DEG;
+    const rad = (TILT_DEG * Math.PI) / 180;
 
+    // Place the bottle so that, once tipped, its mouth hangs over the target
+    // opening. The mouth sits `reach` from the pivot; rotating swings it by
+    // (sin, cos) of the tilt, so we solve backwards for the pivot position.
+    const reach = srcRect.height * 0.88;
+    const mouthX = dstNeckRect.left + dstNeckRect.width / 2;
+    const mouthY = dstNeckRect.top;
+    const pivotX = srcRect.left + srcRect.width / 2;
+    const pivotY = srcRect.top + srcRect.height * 0.88;
+    let dx = mouthX - sign * reach * Math.sin(rad) - pivotX;
+    let dy = mouthY - 70 + reach * Math.cos(rad) - pivotY;
+
+    // Keep the tipped bottle on screen -- pouring between two bottles in the
+    // leftmost column would otherwise swing it past the viewport edge. Nudging
+    // it back is safe because the stream is recomputed per frame and stays
+    // attached even when the mouth is no longer perfectly over the target.
+    const margin = 10;
+    const halfW = srcRect.width / 2;
+    const spanLeft = Math.min(pivotX + dx, mouthX) - halfW;
+    const spanRight = Math.max(pivotX + dx, mouthX) + halfW;
+    if (spanLeft < margin) dx += margin - spanLeft;
+    else if (spanRight > window.innerWidth - margin) dx -= spanRight - (window.innerWidth - margin);
+    const spanTop = pivotY + dy - reach * Math.cos(rad);
+    if (spanTop < margin) dy += margin - spanTop;
+
+    srcEl.classList.add("in-flight", "pouring");
+
+    const glide = "cubic-bezier(0.33, 0.02, 0.24, 1)";
+    const bottleAnim = srcEl.animate([
+      { offset: 0, transform: "translate(0px, 0px) rotate(0deg) scale(1)", easing: "cubic-bezier(0.3, 0, 0.2, 1)" },
+      { offset: 0.13, transform: `translate(${dx * 0.06}px, -28px) rotate(0deg) scale(1.04)`, easing: glide },
+      { offset: 0.36, transform: `translate(${dx * 0.64}px, ${dy * 0.64 - 20}px) rotate(${rot * 0.24}deg) scale(1.04)`, easing: glide },
+      { offset: 0.5, transform: `translate(${dx}px, ${dy}px) rotate(${rot}deg) scale(1.03)`, easing: "linear" },
+      { offset: 0.79, transform: `translate(${dx}px, ${dy}px) rotate(${rot + sign * 8}deg) scale(1.03)`, easing: glide },
+      { offset: 0.89, transform: `translate(${dx * 0.7}px, ${dy * 0.7 - 16}px) rotate(${rot * 0.32}deg) scale(1.03)`, easing: glide },
+      { offset: 1, transform: "translate(0px, 0px) rotate(0deg) scale(1)", easing: "cubic-bezier(0.2, 0.7, 0.3, 1)" },
+    ], { duration: total, fill: "both" });
+    activeAnimations.push(bottleAnim);
+
+    // The receiving bottle gives a little as the liquid lands.
+    const dstAnim = dstEl.animate([
+      { transform: "translateY(0) scale(1)" },
+      { transform: "translateY(2px) scale(1.02)" },
+      { transform: "translateY(0) scale(1)" },
+    ], { duration: pourDur, delay: pourStart, easing: "ease-in-out" });
+    activeAnimations.push(dstAnim);
+
+    // Kick off the liquid itself at the moment the bottle reaches full tilt.
     pendingPourTimeouts.push(setTimeout(() => {
-      const srcNeck = srcEl.querySelector(".bottle-neck");
-      const dstNeck = dstEl.querySelector(".bottle-neck");
+      if (token !== pourToken) return;
+      runStream(srcEl, dstEl, color, pourDur, token);
+
       const srcBody = srcEl.querySelector(".bottle-body");
       const dstBody = dstEl.querySelector(".bottle-body");
-      const srcNeckRect = srcNeck.getBoundingClientRect();
-      const dstNeckRect = dstNeck.getBoundingClientRect();
+      const step = pourDur / amount;
+      const unitDur = step * 1.1;
 
-      const x1 = srcNeckRect.left + srcNeckRect.width / 2;
-      const y1 = srcNeckRect.bottom - 4;
-      const x2 = dstNeckRect.left + dstNeckRect.width / 2;
-      const y2 = dstNeckRect.top + 4;
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const length = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-      const angle = Math.atan2(dy, dx) * 180 / Math.PI - 90;
-
-      const stream = document.createElement("div");
-      stream.className = "pour-stream";
-      stream.style.background = topColor;
-      stream.style.left = x1 + "px";
-      stream.style.top = y1 + "px";
-      stream.style.height = length + "px";
-      stream.style.transform = `rotate(${angle}deg)`;
-      stream.style.setProperty("--pour-dur", pourDurationMs + "ms");
-      document.body.appendChild(stream);
-      requestAnimationFrame(() => stream.classList.add("active"));
-
-      const srcUnitEls = Array.from(srcBody.children).slice(-amount);
-      srcUnitEls.forEach((el) => {
-        el.style.setProperty("--pour-dur", pourDurationMs + "ms");
+      // Drain top-down and fill bottom-up, one band at a time, so the levels
+      // move together instead of the whole column jumping at once.
+      const draining = Array.from(srcBody.children).slice(-amount);
+      draining.forEach((el, i) => {
+        el.style.setProperty("--pour-dur", unitDur + "ms");
+        el.style.animationDelay = (amount - 1 - i) * step + "ms";
         el.classList.add("pour-unit-exit");
       });
       for (let i = 0; i < amount; i++) {
         const unit = document.createElement("div");
         unit.className = "unit pour-unit-enter";
-        unit.style.background = topColor;
-        unit.style.setProperty("--pour-dur", pourDurationMs + "ms");
+        unit.style.background = color;
+        unit.style.setProperty("--pour-dur", unitDur + "ms");
+        unit.style.animationDelay = i * step + "ms";
         dstBody.appendChild(unit);
       }
+    }, pourStart));
 
-      pendingPourTimeouts.push(setTimeout(() => {
-        stream.remove();
-        srcEl.classList.remove(tiltClass, "pouring");
-        pour(fromIdx, toIdx);
-        animating = false;
-        render();
-        if (isWin()) {
-          won = true;
-          setTimeout(showWin, 250);
-        }
-      }, pourDurationMs + 40));
-    }, 200));
+    bottleAnim.finished.then(() => {
+      if (token !== pourToken) return;
+      srcEl.classList.remove("in-flight", "pouring");
+      bottleAnim.cancel();
+      activeAnimations = [];
+      if (activeRaf) { cancelAnimationFrame(activeRaf); activeRaf = 0; }
+      if (pourLayer) pourLayer.textContent = "";
+      commitPour(fromIdx, toIdx);
+    }).catch(() => { /* cancelled by a reset -- nothing to commit */ });
   }
 
   function showWin() {
