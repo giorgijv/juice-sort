@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Juice Sort</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+
+    <header class="topbar">
+      <h1 class="logo">🧃 Juice Sort</h1>
+      <div class="stats">
+        <span id="movesLabel">Moves: 0</span>
+        <span id="difficultyLabel"></span>
+      </div>
+    </header>
+
+    <!-- Difficulty select screen -->
+    <section id="menuScreen" class="screen">
+      <h2>Choose your difficulty</h2>
+      <div class="menu-cards">
+        <button class="diff-card" data-diff="easy">
+          <span class="diff-title">Easy</span>
+          <span class="diff-desc">5 colors, more space to maneuver</span>
+        </button>
+        <button class="diff-card" data-diff="medium">
+          <span class="diff-title">Medium</span>
+          <span class="diff-desc">7 colors, moderate space</span>
+        </button>
+        <button class="diff-card" data-diff="hard">
+          <span class="diff-title">Hard</span>
+          <span class="diff-desc">9 colors, barely any space</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Game screen -->
+    <section id="gameScreen" class="screen hidden">
+      <div class="long-bottle-zone">
+        <div id="longBottleWrap"></div>
+      </div>
+      <div id="bottleGrid" class="bottle-grid"></div>
+
+      <div class="controls">
+        <button id="undoBtn">↶ Undo</button>
+        <button id="restartBtn">⟲ Restart</button>
+        <button id="newGameBtn">🔀 New Game</button>
+        <button id="menuBtn">☰ Menu</button>
+      </div>
+    </section>
+
+    <!-- Win overlay -->
+    <div id="winOverlay" class="overlay hidden">
+      <div class="win-card">
+        <h2>🎉 Sorted!</h2>
+        <p id="winStats"></p>
+        <button id="winNextBtn">Play Again</button>
+        <button id="winMenuBtn">Choose Difficulty</button>
+      </div>
+    </div>
+
+  </div>
+
+<script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,283 @@
+:root {
+  --bg: #1b2436;
+  --bg-alt: #232f47;
+  --card: #2a3854;
+  --text: #eef2fb;
+  --muted: #9aa7c2;
+  --accent: #7c6bf0;
+  --glass-border: rgba(255,255,255,0.35);
+  --glass-fill: rgba(255,255,255,0.04);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: radial-gradient(circle at 50% 0%, #29365490, transparent 60%), var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", Roboto, system-ui, -apple-system, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+#app {
+  max-width: 900px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 12px 32px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 6px 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.logo {
+  font-size: 1.4rem;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.stats {
+  display: flex;
+  gap: 14px;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.screen { flex: 1; display: flex; flex-direction: column; }
+.hidden { display: none !important; }
+
+#gameScreen { justify-content: center; }
+
+/* ---------- Menu screen ---------- */
+#menuScreen {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 20px;
+  padding: 40px 12px;
+}
+
+#menuScreen h2 {
+  margin: 0 0 10px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.menu-cards {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.diff-card {
+  background: var(--card);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 22px 26px;
+  min-width: 180px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.diff-card:hover {
+  transform: translateY(-3px);
+  background: #33456a;
+}
+
+.diff-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.diff-desc {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* ---------- Game screen ---------- */
+.long-bottle-zone {
+  display: flex;
+  justify-content: center;
+  margin: 6px 0 18px;
+}
+
+.bottle-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 14px;
+  justify-content: center;
+  align-content: flex-start;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.controls button {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.controls button:hover { background: #33456a; }
+.controls button:disabled { opacity: 0.4; cursor: default; }
+
+/* ---------- Bottle visuals ---------- */
+.bottle {
+  --unit-h: 22px;
+  position: relative;
+  width: 62px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.12s ease;
+}
+
+.bottle.selected {
+  transform: translateY(-10px);
+}
+
+.bottle.invalid {
+  animation: shake 0.35s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.bottle-neck {
+  width: 22px;
+  height: 12px;
+  background: var(--glass-fill);
+  border: 2px solid var(--glass-border);
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+}
+
+.bottle-body {
+  width: 62px;
+  border: 2px solid var(--glass-border);
+  border-top: none;
+  border-radius: 0 0 16px 16px;
+  background: var(--glass-fill);
+  display: flex;
+  flex-direction: column-reverse;
+  overflow: hidden;
+  box-shadow: inset -6px 0 10px rgba(0,0,0,0.25), inset 6px 0 10px rgba(255,255,255,0.03);
+}
+
+.bottle[data-capacity="4"] .bottle-body { height: calc(var(--unit-h) * 4); }
+.bottle[data-capacity="8"] .bottle-body { height: calc(var(--unit-h) * 8); }
+
+.bottle.long-bottle { --unit-h: 20px; }
+.bottle.long-bottle .bottle-body { width: 74px; }
+.bottle.long-bottle .bottle-neck { width: 26px; }
+
+.unit {
+  width: 100%;
+  height: var(--unit-h);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.unit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0) 40%);
+}
+
+.cork {
+  position: absolute;
+  top: -14px;
+  width: 30px;
+  height: 16px;
+  background: linear-gradient(180deg, #c98a4b, #8a5a2c);
+  border-radius: 5px;
+  border: 1px solid #6d431e;
+  z-index: 2;
+}
+
+.bottle.long-bottle .cork { width: 34px; top: -14px; }
+
+.label {
+  margin-top: 6px;
+  font-size: 0.7rem;
+  color: var(--muted);
+  min-height: 14px;
+}
+
+/* ---------- Win overlay ---------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10,14,24,0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.win-card {
+  background: var(--card);
+  padding: 32px 36px;
+  border-radius: 18px;
+  text-align: center;
+  max-width: 320px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.win-card h2 { margin-top: 0; }
+
+.win-card button {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: white;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.win-card button:last-child {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: var(--text);
+}
+
+@media (max-width: 480px) {
+  .bottle { width: 50px; --unit-h: 18px; }
+  .bottle-body { width: 50px; }
+  .bottle.long-bottle .bottle-body { width: 62px; }
+}
