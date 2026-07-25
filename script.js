@@ -2,9 +2,6 @@
   "use strict";
 
   // ---------- Config ----------
-  const SMALL_CAPACITY = 4;
-  const LONG_CAPACITY = 8;
-
   const PALETTE = [
     "#8b5cf6", // purple
     "#14b8a6", // teal
@@ -17,11 +14,14 @@
     "#78350f", // brown
   ];
 
+  // Each tier scales three things at once: how much juice each small bottle
+  // holds, how many bottles/colors are in play, and (for Expert) how many
+  // goal bottles must be filled.
   const DIFFICULTY = {
-    easy:   { smallColors: 4, buffers: 3, longBottles: 1, iterations: 60 },
-    medium: { smallColors: 6, buffers: 2, longBottles: 1, iterations: 120 },
-    hard:   { smallColors: 8, buffers: 2, longBottles: 1, iterations: 200 },
-    expert: { smallColors: 6, buffers: 3, longBottles: 2, iterations: 220 },
+    easy:   { smallCapacity: 4, longCapacity: 8,  smallColors: 4, buffers: 3, longBottles: 1, iterations: 70 },
+    medium: { smallCapacity: 5, longCapacity: 10, smallColors: 6, buffers: 3, longBottles: 1, iterations: 150 },
+    hard:   { smallCapacity: 6, longCapacity: 12, smallColors: 8, buffers: 3, longBottles: 1, iterations: 240 },
+    expert: { smallCapacity: 6, longCapacity: 12, smallColors: 6, buffers: 3, longBottles: 2, iterations: 280 },
   };
 
   // ---------- State ----------
@@ -79,13 +79,13 @@
 
     const list = [];
     for (let i = 0; i < cfg.smallColors; i++) {
-      list.push({ capacity: SMALL_CAPACITY, units: Array(SMALL_CAPACITY).fill(palette[i]), isLong: false });
+      list.push({ capacity: cfg.smallCapacity, units: Array(cfg.smallCapacity).fill(palette[i]), isLong: false });
     }
     for (let i = 0; i < cfg.buffers; i++) {
-      list.push({ capacity: SMALL_CAPACITY, units: [], isLong: false });
+      list.push({ capacity: cfg.smallCapacity, units: [], isLong: false });
     }
     for (let i = 0; i < longBottles; i++) {
-      list.push({ capacity: LONG_CAPACITY, units: Array(LONG_CAPACITY).fill(longColors[i]), isLong: true, designatedColor: longColors[i] });
+      list.push({ capacity: cfg.longCapacity, units: Array(cfg.longCapacity).fill(longColors[i]), isLong: true, designatedColor: longColors[i] });
     }
     return { list, iterations: cfg.iterations };
   }
@@ -377,6 +377,7 @@
     wrap.className = "bottle" + (bottle.isLong ? " long-bottle" : "");
     wrap.dataset.index = idx;
     wrap.dataset.capacity = bottle.capacity;
+    wrap.style.setProperty("--capacity", bottle.capacity);
     if (selected === idx) wrap.classList.add("selected");
 
     const neck = document.createElement("div");
