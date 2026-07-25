@@ -18,15 +18,16 @@
   ];
 
   const DIFFICULTY = {
-    easy:   { smallColors: 4, buffers: 3, iterations: 60 },
-    medium: { smallColors: 6, buffers: 2, iterations: 120 },
-    hard:   { smallColors: 8, buffers: 2, iterations: 200 },
+    easy:   { smallColors: 4, buffers: 3, longBottles: 1, iterations: 60 },
+    medium: { smallColors: 6, buffers: 2, longBottles: 1, iterations: 120 },
+    hard:   { smallColors: 8, buffers: 2, longBottles: 1, iterations: 200 },
+    expert: { smallColors: 6, buffers: 3, longBottles: 2, iterations: 220 },
   };
 
   // ---------- State ----------
   let bottles = [];       // array of {capacity, units:[colors], isLong}
   let initialBottles = []; // deep copy of bottles as first dealt, for Restart
-  let longIndex = -1;
+  let longIndices = [];
   let selected = -1;
   let moves = 0;
   let history = [];       // {from, to, amount, color}
@@ -71,9 +72,10 @@
 
   function buildSolvedBottles(diffKey) {
     const cfg = DIFFICULTY[diffKey];
-    const totalColors = cfg.smallColors + 1;
+    const longBottles = cfg.longBottles || 1;
+    const totalColors = cfg.smallColors + longBottles;
     const palette = PALETTE.slice(0, totalColors);
-    const longColor = palette[totalColors - 1];
+    const longColors = palette.slice(cfg.smallColors); // last `longBottles` colors
 
     const list = [];
     for (let i = 0; i < cfg.smallColors; i++) {
@@ -82,7 +84,9 @@
     for (let i = 0; i < cfg.buffers; i++) {
       list.push({ capacity: SMALL_CAPACITY, units: [], isLong: false });
     }
-    list.push({ capacity: LONG_CAPACITY, units: Array(LONG_CAPACITY).fill(longColor), isLong: true });
+    for (let i = 0; i < longBottles; i++) {
+      list.push({ capacity: LONG_CAPACITY, units: Array(LONG_CAPACITY).fill(longColors[i]), isLong: true, designatedColor: longColors[i] });
+    }
     return { list, iterations: cfg.iterations };
   }
 
@@ -94,48 +98,95 @@
     return cnt;
   }
 
+  // One safe reverse-pour step: peels a color run off some bottle allowed by
+  // `eligibleD` and pushes it onto some bottle allowed by `eligibleS`. This is
+  // always the exact inverse of a real legal forward pour (see `scramble` doc
+  // below), restricted to a subset of bottles so callers can control ordering.
+  function reverseStep(list, eligibleD, eligibleS) {
+    const n = list.length;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const dCandidates = [];
+      for (let i = 0; i < n; i++) {
+        if (list[i].units.length > 0 && (!eligibleD || eligibleD(i))) dCandidates.push(i);
+      }
+      if (dCandidates.length === 0) return false;
+      const d = dCandidates[randInt(dCandidates.length)];
+      const dUnits = list[d].units;
+      const color = dUnits[dUnits.length - 1];
+      const run = topRunLengthOf(dUnits);
+
+      let amount;
+      if (run === dUnits.length) {
+        amount = 1 + randInt(run); // whole bottle is one color: any amount is safe
+      } else {
+        if (run < 2) continue; // can't safely peel without exposing a mismatched top
+        amount = 1 + randInt(run - 1);
+      }
+
+      const sCandidates = [];
+      for (let j = 0; j < n; j++) {
+        if (j === d) continue;
+        if (eligibleS && !eligibleS(j)) continue;
+        const sUnits = list[j].units;
+        if (list[j].capacity - sUnits.length < amount) continue;
+        if (sUnits.length > 0 && sUnits[sUnits.length - 1] === color) continue;
+        // Never fill an empty bottle to exactly full in one push: it could
+        // never receive this color again, so it would lock permanently.
+        if (sUnits.length === 0 && amount === list[j].capacity) continue;
+        sCandidates.push(j);
+      }
+      if (sCandidates.length === 0) continue;
+      const s = sCandidates[randInt(sCandidates.length)];
+
+      for (let a = 0; a < amount; a++) list[s].units.push(list[d].units.pop());
+      return true;
+    }
+    return false;
+  }
+
   // Scrambles `list` by repeatedly undoing a hypothetical legal pour, starting
   // from the fully solved layout. Each step is the exact inverse of a real
   // forward pour, so the resulting layout is always solvable (solve it by
   // replaying the recorded steps in reverse as forward pours).
+  //
+  // Runs in two phases so the derived solve order always finishes by pouring
+  // into the long bottle(s) last, matching the in-game rule that a long
+  // bottle can't be completed until every small bottle is sorted:
+  //   Phase A only peels FROM long bottles, pushing onto currently-empty
+  //   small bottles -- so undoing it last (in the real solve) is always the
+  //   final act, once nothing else needs sorting.
+  //   Phase B scrambles everything else (small bottles + buffers), never
+  //   touching the long bottle(s).
   function scramble(list, iterations) {
-    const n = list.length;
+    // Guarantee every long bottle gets peeled at least once, so none of them
+    // can end up already complete before the game even starts.
+    list.forEach((b, idx) => {
+      if (!b.isLong) return;
+      const emptyExists = list.some((x) => !x.isLong && x.units.length === 0);
+      if (!emptyExists) return;
+      reverseStep(
+        list,
+        (i) => i === idx,
+        (j) => !list[j].isLong && list[j].units.length === 0
+      );
+    });
+
+    for (let guard = 0; guard < list.length * 2; guard++) {
+      const emptyExists = list.some((b) => !b.isLong && b.units.length === 0);
+      if (!emptyExists) break;
+      reverseStep(
+        list,
+        (i) => list[i].isLong,
+        (j) => !list[j].isLong && list[j].units.length === 0
+      );
+    }
 
     for (let t = 0; t < iterations; t++) {
-      for (let attempt = 0; attempt < 40; attempt++) {
-        const dCandidates = [];
-        for (let i = 0; i < n; i++) if (list[i].units.length > 0) dCandidates.push(i);
-        if (dCandidates.length === 0) break;
-        const d = dCandidates[randInt(dCandidates.length)];
-        const dUnits = list[d].units;
-        const color = dUnits[dUnits.length - 1];
-        const run = topRunLengthOf(dUnits);
-
-        let amount;
-        if (run === dUnits.length) {
-          amount = 1 + randInt(run); // whole bottle is one color: any amount is safe
-        } else {
-          if (run < 2) continue; // can't safely peel without exposing a mismatched top
-          amount = 1 + randInt(run - 1);
-        }
-
-        const sCandidates = [];
-        for (let j = 0; j < n; j++) {
-          if (j === d) continue;
-          const sUnits = list[j].units;
-          if (list[j].capacity - sUnits.length < amount) continue;
-          if (sUnits.length > 0 && sUnits[sUnits.length - 1] === color) continue;
-          // Never fill an empty bottle to exactly full in one push: it could
-          // never receive this color again, so it would lock permanently.
-          if (sUnits.length === 0 && amount === list[j].capacity) continue;
-          sCandidates.push(j);
-        }
-        if (sCandidates.length === 0) continue;
-        const s = sCandidates[randInt(sCandidates.length)];
-
-        for (let a = 0; a < amount; a++) list[s].units.push(list[d].units.pop());
-        break;
-      }
+      reverseStep(
+        list,
+        (i) => !list[i].isLong,
+        (j) => !list[j].isLong
+      );
     }
     return list;
   }
@@ -149,8 +200,9 @@
 
     const { list, iterations } = buildSolvedBottles(diffKey);
     bottles = scramble(list, iterations);
-    longIndex = bottles.findIndex((b) => b.isLong);
-    initialBottles = bottles.map((b) => ({ capacity: b.capacity, units: b.units.slice(), isLong: b.isLong }));
+    longIndices = [];
+    bottles.forEach((b, i) => { if (b.isLong) longIndices.push(i); });
+    initialBottles = bottles.map((b) => ({ capacity: b.capacity, units: b.units.slice(), isLong: b.isLong, designatedColor: b.designatedColor }));
 
     menuScreen.classList.add("hidden");
     gameScreen.classList.remove("hidden");
@@ -167,7 +219,7 @@
     moves = 0;
     history = [];
     selected = -1;
-    bottles = initialBottles.map((b) => ({ capacity: b.capacity, units: b.units.slice(), isLong: b.isLong }));
+    bottles = initialBottles.map((b) => ({ capacity: b.capacity, units: b.units.slice(), isLong: b.isLong, designatedColor: b.designatedColor }));
     winOverlay.classList.add("hidden");
     updateMovesLabel();
     render();
@@ -180,12 +232,27 @@
     return bottle.units.every((c) => c === first);
   }
 
+  function isMono(bottle) {
+    return bottle.units.length > 0 && bottle.units.every((c) => c === bottle.units[0]);
+  }
+
+  // A small (non-long) bottle counts as "settled" -- and so never blocks a
+  // long bottle from completing -- once it's empty, capped, or purely holding
+  // a staged fragment of some OTHER (not yet delivered) long bottle's color.
+  function isSettled(bottle) {
+    if (bottle.units.length === 0) return true;
+    if (isCapped(bottle)) return true;
+    if (isMono(bottle) && longIndices.some((idx) => bottles[idx].designatedColor === bottle.units[0])) return true;
+    return false;
+  }
+
   function isWin() {
-    for (const b of bottles) {
-      if (b.units.length === 0) continue;
-      if (!isCapped(b)) return false;
+    for (let i = 0; i < bottles.length; i++) {
+      if (bottles[i].isLong) continue;
+      if (bottles[i].units.length === 0) continue;
+      if (!isCapped(bottles[i])) return false;
     }
-    return isCapped(bottles[longIndex]);
+    return longIndices.every((idx) => isCapped(bottles[idx]));
   }
 
   function topRunLength(bottle) {
@@ -208,6 +275,20 @@
     if (destSpace <= 0) return false;
     const topColor = src.units[src.units.length - 1];
     if (dst.units.length > 0 && dst.units[dst.units.length - 1] !== topColor) return false;
+
+    // A long/goal bottle can't be completed (filled to full with one color)
+    // until every OTHER small bottle is settled, and the source itself must
+    // end up sorted too -- it may empty out as a direct result of this pour.
+    if (dst.isLong) {
+      const amount = Math.min(topRunLength(src), destSpace);
+      if (dst.units.length + amount === dst.capacity) {
+        for (let k = 0; k < bottles.length; k++) {
+          if (k === fromIdx || bottles[k].isLong) continue;
+          if (!isSettled(bottles[k])) return false;
+        }
+        if (src.units.length - amount !== 0) return false;
+      }
+    }
     return true;
   }
 

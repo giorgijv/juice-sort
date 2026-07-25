@@ -116,6 +116,13 @@ html, body {
   margin: 6px 0 18px;
 }
 
+#longBottleWrap {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0 28px;
+}
+
 .bottle-grid {
   display: flex;
   flex-wrap: wrap;
