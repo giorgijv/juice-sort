@@ -166,10 +166,13 @@ html, body {
 .controls button:disabled { opacity: 0.4; cursor: default; }
 
 /* ---------- Bottle visuals ---------- */
+/* Bottle size is driven by --bw / --uh, set on the game screen to fit the
+   board to the viewport (a 10-a-side Expert board needs smaller glass than a
+   4-a-side Easy one). Values here are the fallbacks. */
 .bottle {
-  --unit-h: 22px;
+  --unit-h: var(--uh, 22px);
   position: relative;
-  width: 62px;
+  width: var(--bw, 62px);
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -276,7 +279,7 @@ html, body {
 }
 
 .bottle-neck {
-  width: 22px;
+  width: calc(var(--bw, 62px) * 0.355);
   height: 12px;
   background: var(--glass-fill);
   border: 2px solid var(--glass-border);
@@ -299,7 +302,7 @@ html, body {
 
 .bottle-body {
   position: relative;
-  width: 62px;
+  width: var(--bw, 62px);
   border: 2px solid var(--glass-border);
   border-top: none;
   border-radius: 0 0 17px 17px;
@@ -327,9 +330,9 @@ html, body {
   pointer-events: none;
 }
 
-.bottle.long-bottle { --unit-h: 20px; }
-.bottle.long-bottle .bottle-body { width: 74px; }
-.bottle.long-bottle .bottle-neck { width: 26px; }
+.bottle.long-bottle { --unit-h: calc(var(--uh, 22px) * 0.91); }
+.bottle.long-bottle .bottle-body { width: calc(var(--bw, 62px) * 1.19); }
+.bottle.long-bottle .bottle-neck { width: calc(var(--bw, 62px) * 0.42); }
 
 .unit {
   width: 100%;
@@ -368,7 +371,7 @@ html, body {
 .cork {
   position: absolute;
   top: -14px;
-  width: 30px;
+  width: calc(var(--bw, 62px) * 0.48);
   height: 16px;
   background: linear-gradient(180deg, #c98a4b, #8a5a2c);
   border-radius: 5px;
@@ -376,7 +379,7 @@ html, body {
   z-index: 2;
 }
 
-.bottle.long-bottle .cork { width: 34px; top: -14px; }
+.bottle.long-bottle .cork { width: calc(var(--bw, 62px) * 0.55); top: -14px; }
 
 .label {
   margin-top: 6px;
@@ -426,24 +429,16 @@ html, body {
   color: var(--text);
 }
 
-/* Three columns a side stops fitting well before phone widths, so step the
-   side grids down rather than letting the board overflow. */
+/* Bottle size and column count are computed in JS to fit the board to the
+   viewport, so these only tighten the spacing between them. */
 @media (max-width: 760px) {
-  .board { gap: 16px; }
-  .side-grid { grid-template-columns: repeat(2, auto); gap: 16px 10px; }
+  .board { gap: 14px; }
+  .side-grid { gap: 16px 9px; }
+  .goal-column { gap: 12px; }
 }
 
 @media (max-width: 480px) {
-  .bottle { width: 50px; --unit-h: 18px; }
-  .bottle-body { width: 50px; }
-  .bottle.long-bottle { --unit-h: 17px; }
-  .bottle.long-bottle .bottle-body { width: 60px; }
-  .board { gap: 10px; }
-  .side-grid { gap: 14px 8px; }
-  .goal-column { gap: 10px; }
-}
-
-/* Very narrow: a single column of small bottles each side. */
-@media (max-width: 360px) {
-  .side-grid { grid-template-columns: auto; }
+  .board { gap: 9px; }
+  .side-grid { gap: 13px 7px; }
+  .goal-column { gap: 9px; }
 }

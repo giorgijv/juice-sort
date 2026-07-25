@@ -2,8 +2,10 @@
   "use strict";
 
   // ---------- Config ----------
+  // Ordered so the smaller tiers, which take the first N entries, get the most
+  // easily separated colours. The later entries exist for the big boards.
   const PALETTE = [
-    "#8b5cf6", // purple
+    "#8b5cf6", // violet
     "#14b8a6", // teal
     "#a3e635", // lime
     "#f97316", // orange
@@ -12,6 +14,13 @@
     "#eab308", // yellow
     "#f472b6", // pink
     "#78350f", // brown
+    "#06b6d4", // cyan
+    "#4338ca", // indigo
+    "#d946ef", // magenta
+    "#166534", // dark green
+    "#94a3b8", // slate
+    "#fdba74", // peach
+    "#7f1d1d", // maroon
   ];
 
   // Each tier scales three things at once: how much juice each small bottle
@@ -26,11 +35,16 @@
   //
   // Iterations set the scramble depth -- the difficulty dial -- tuned per
   // tier well short of the point where mixing saturates.
+  // Small bottles per side step 4 / 6 / 8 / 10 across the tiers, so
+  // smallColors + buffers is 8 / 12 / 16 / 20 -- always even, always split
+  // into two equal halves. buffers must be >= longBottles (each goal bottle
+  // needs an empty to drain into during generation) and smallColors +
+  // longBottles must fit the palette.
   const DIFFICULTY = {
-    easy:   { smallCapacity: 4, longCapacity: 8,  smallColors: 4, buffers: 4, longBottles: 1, iterations: 60 },
-    medium: { smallCapacity: 5, longCapacity: 10, smallColors: 6, buffers: 2, longBottles: 1, iterations: 240 },
-    hard:   { smallCapacity: 6, longCapacity: 12, smallColors: 8, buffers: 4, longBottles: 1, iterations: 180 },
-    expert: { smallCapacity: 6, longCapacity: 12, smallColors: 6, buffers: 2, longBottles: 2, iterations: 320 },
+    easy:   { smallCapacity: 4, longCapacity: 8,  smallColors: 5,  buffers: 3, longBottles: 1, iterations: 80 },
+    medium: { smallCapacity: 5, longCapacity: 10, smallColors: 8,  buffers: 4, longBottles: 1, iterations: 180 },
+    hard:   { smallCapacity: 6, longCapacity: 12, smallColors: 12, buffers: 4, longBottles: 1, iterations: 260 },
+    expert: { smallCapacity: 6, longCapacity: 12, smallColors: 14, buffers: 6, longBottles: 2, iterations: 340 },
   };
 
   // ---------- State ----------
@@ -691,14 +705,58 @@
       }
     });
 
-    // Pick a column count that divides the side evenly, so each side lays out
-    // as full rows rather than leaving a stray bottle on the last row.
-    const cols = leftCount % 3 === 0 ? 3 : 2;
-    leftGrid.style.setProperty("--side-cols", cols);
-    rightGrid.style.setProperty("--side-cols", cols);
-
+    fitBoard(leftCount, longIndices.length);
     undoBtn.disabled = history.length === 0;
   }
+
+  // Chooses how many columns each side uses and how big the glass is drawn.
+  // Only column counts that divide the side exactly are considered, so a side
+  // always fills whole rows; among those we take the widest arrangement whose
+  // bottles still render at a usable size, then scale the glass to fit.
+  const MIN_BOTTLE_W = 34;
+  const MAX_BOTTLE_W = 62;
+
+  function fitBoard(perSide, goalCount) {
+    if (!perSide) return;
+    const appW = Math.min(document.getElementById("app").clientWidth || window.innerWidth, window.innerWidth);
+    const avail = appW - 24; // horizontal padding on #app
+
+    // Cap at half the side so each side is at least two rows -- a single long
+    // row would sit oddly against the full-height goal bottle.
+    const maxCols = Math.min(5, Math.max(1, Math.floor(perSide / 2)));
+    const divisors = [];
+    for (let c = 1; c <= maxCols; c++) if (perSide % c === 0) divisors.push(c);
+
+    // A goal bottle is ~1.19x the width of a small one.
+    const widthFor = (cols) => {
+      const colGap = appW <= 480 ? 7 : appW <= 760 ? 9 : 14;
+      const sideGap = appW <= 480 ? 9 : appW <= 760 ? 14 : 26;
+      const goalGap = appW <= 480 ? 9 : appW <= 760 ? 12 : 22;
+      const units = cols * 2 + goalCount * 1.19;
+      const gaps = (cols - 1) * colGap * 2 + sideGap * 2 + Math.max(0, goalCount - 1) * goalGap;
+      return (avail - gaps) / units;
+    };
+
+    let cols = divisors[0] || 1;
+    let width = widthFor(cols);
+    for (const c of divisors) {
+      const w = widthFor(c);
+      if (w >= MIN_BOTTLE_W + 6) { cols = c; width = w; }
+    }
+    width = Math.max(MIN_BOTTLE_W, Math.min(MAX_BOTTLE_W, width));
+
+    gameScreen.style.setProperty("--bw", width.toFixed(1) + "px");
+    gameScreen.style.setProperty("--uh", Math.max(9, Math.round(width * 0.355)) + "px");
+    leftGrid.style.setProperty("--side-cols", cols);
+    rightGrid.style.setProperty("--side-cols", cols);
+  }
+
+  // Keep the board fitted when the window changes size or the phone rotates.
+  window.addEventListener("resize", () => {
+    if (!bottles.length) return;
+    const perSide = Math.ceil(bottles.reduce((n, b) => n + (b.isLong ? 0 : 1), 0) / 2);
+    fitBoard(perSide, longIndices.length);
+  });
 
   // A known-good solution for the current deal, for automated testing. Gated
   // behind ?e2e so it isn't a one-click spoiler sitting in every player's
