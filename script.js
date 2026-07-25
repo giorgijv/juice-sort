@@ -290,6 +290,9 @@
     return cnt;
   }
 
+  // Colour is not a constraint: juice may be poured into any bottle that has
+  // room, whatever is already in it. The top run of matching colour still
+  // travels together, and simply stacks on top of whatever it lands on.
   function canPour(fromIdx, toIdx) {
     if (fromIdx === toIdx) return false;
     const src = bottles[fromIdx];
@@ -298,15 +301,18 @@
     if (isCapped(src) || isCapped(dst)) return false;
     const destSpace = dst.capacity - dst.units.length;
     if (destSpace <= 0) return false;
-    const topColor = src.units[src.units.length - 1];
-    if (dst.units.length > 0 && dst.units[dst.units.length - 1] !== topColor) return false;
 
-    // A long/goal bottle can't be completed (filled to full with one color)
-    // until every OTHER small bottle is settled, and the source itself must
-    // end up sorted too -- it may empty out as a direct result of this pour.
+    // A long/goal bottle can't be *completed* until every OTHER small bottle
+    // is settled, and the source itself must end up sorted too (it may empty
+    // out as a direct result of this pour). Completing means the pour caps the
+    // bottle -- fills it to the brim with a single colour. Merely filling it
+    // with a mix isn't finishing the goal, so that stays allowed.
     if (dst.isLong) {
+      const topColor = src.units[src.units.length - 1];
       const amount = Math.min(topRunLength(src), destSpace);
-      if (dst.units.length + amount === dst.capacity) {
+      const wouldFill = dst.units.length + amount === dst.capacity;
+      const wouldBeMono = dst.units.every((c) => c === topColor);
+      if (wouldFill && wouldBeMono) {
         for (let k = 0; k < bottles.length; k++) {
           if (k === fromIdx || bottles[k].isLong) continue;
           if (!isSettled(bottles[k])) return false;
