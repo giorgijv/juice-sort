@@ -33,6 +33,8 @@
   let history = [];       // {from, to, amount, color}
   let currentDifficulty = null;
   let won = false;
+  let animating = false;
+  let pendingPourTimeouts = [];
 
   // ---------- DOM ----------
   const menuScreen = document.getElementById("menuScreen");
@@ -62,6 +64,7 @@
   });
 
   function showMenu() {
+    clearAnimationArtifacts();
     gameScreen.classList.add("hidden");
     menuScreen.classList.remove("hidden");
     difficultyLabel.textContent = "";
@@ -191,7 +194,15 @@
     return list;
   }
 
+  function clearAnimationArtifacts() {
+    animating = false;
+    pendingPourTimeouts.forEach((id) => clearTimeout(id));
+    pendingPourTimeouts = [];
+    document.querySelectorAll(".pour-stream").forEach((el) => el.remove());
+  }
+
   function startGame(diffKey) {
+    clearAnimationArtifacts();
     currentDifficulty = diffKey;
     won = false;
     moves = 0;
@@ -215,6 +226,7 @@
   function restartSame() {
     if (!currentDifficulty || initialBottles.length === 0) return;
     // Reset the current puzzle back to its original dealt state (no reshuffle).
+    clearAnimationArtifacts();
     won = false;
     moves = 0;
     history = [];
@@ -306,7 +318,7 @@
   }
 
   function undo() {
-    if (history.length === 0 || won) return;
+    if (history.length === 0 || won || animating) return;
     const last = history.pop();
     const src = bottles[last.to];
     const dst = bottles[last.from];
@@ -330,7 +342,7 @@
   }
 
   function handleBottleClick(idx) {
-    if (won) return;
+    if (won || animating) return;
     const bottle = bottles[idx];
 
     if (selected === -1) {
@@ -347,13 +359,7 @@
     }
 
     if (canPour(selected, idx)) {
-      pour(selected, idx);
-      selected = -1;
-      render();
-      if (isWin()) {
-        won = true;
-        setTimeout(showWin, 250);
-      }
+      animatePourThenCommit(selected, idx);
     } else {
       flashInvalid(idx);
       // If clicked bottle itself has liquid and isn't capped, switch selection to it instead
@@ -364,6 +370,95 @@
       }
       render();
     }
+  }
+
+  // Animates the liquid visibly flowing from `fromIdx` into `toIdx` -- tilting
+  // the source bottle, tracing a stream between the two necks, draining the
+  // source's top units and filling the destination's -- then commits the real
+  // state change once the animation finishes, so the final render lines up
+  // exactly with where the animation left off.
+  function animatePourThenCommit(fromIdx, toIdx) {
+    const src = bottles[fromIdx];
+    const dst = bottles[toIdx];
+    const topColor = src.units[src.units.length - 1];
+    const amount = Math.min(topRunLength(src), dst.capacity - dst.units.length);
+
+    animating = true;
+    selected = -1;
+    render();
+
+    const srcEl = document.querySelector(`.bottle[data-index="${fromIdx}"]`);
+    const dstEl = document.querySelector(`.bottle[data-index="${toIdx}"]`);
+    if (!srcEl || !dstEl) {
+      // DOM somehow not ready -- fall back to an instant, unanimated pour.
+      pour(fromIdx, toIdx);
+      animating = false;
+      render();
+      if (isWin()) { won = true; setTimeout(showWin, 250); }
+      return;
+    }
+
+    const srcRect = srcEl.getBoundingClientRect();
+    const dstRect = dstEl.getBoundingClientRect();
+    const tiltClass = (dstRect.left + dstRect.width / 2) < (srcRect.left + srcRect.width / 2) ? "tilt-left" : "tilt-right";
+    srcEl.classList.add(tiltClass);
+    srcEl.classList.add("pouring");
+
+    const pourDurationMs = Math.min(900, 380 + amount * 90);
+
+    pendingPourTimeouts.push(setTimeout(() => {
+      const srcNeck = srcEl.querySelector(".bottle-neck");
+      const dstNeck = dstEl.querySelector(".bottle-neck");
+      const srcBody = srcEl.querySelector(".bottle-body");
+      const dstBody = dstEl.querySelector(".bottle-body");
+      const srcNeckRect = srcNeck.getBoundingClientRect();
+      const dstNeckRect = dstNeck.getBoundingClientRect();
+
+      const x1 = srcNeckRect.left + srcNeckRect.width / 2;
+      const y1 = srcNeckRect.bottom - 4;
+      const x2 = dstNeckRect.left + dstNeckRect.width / 2;
+      const y2 = dstNeckRect.top + 4;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const length = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI - 90;
+
+      const stream = document.createElement("div");
+      stream.className = "pour-stream";
+      stream.style.background = topColor;
+      stream.style.left = x1 + "px";
+      stream.style.top = y1 + "px";
+      stream.style.height = length + "px";
+      stream.style.transform = `rotate(${angle}deg)`;
+      stream.style.setProperty("--pour-dur", pourDurationMs + "ms");
+      document.body.appendChild(stream);
+      requestAnimationFrame(() => stream.classList.add("active"));
+
+      const srcUnitEls = Array.from(srcBody.children).slice(-amount);
+      srcUnitEls.forEach((el) => {
+        el.style.setProperty("--pour-dur", pourDurationMs + "ms");
+        el.classList.add("pour-unit-exit");
+      });
+      for (let i = 0; i < amount; i++) {
+        const unit = document.createElement("div");
+        unit.className = "unit pour-unit-enter";
+        unit.style.background = topColor;
+        unit.style.setProperty("--pour-dur", pourDurationMs + "ms");
+        dstBody.appendChild(unit);
+      }
+
+      pendingPourTimeouts.push(setTimeout(() => {
+        stream.remove();
+        srcEl.classList.remove(tiltClass, "pouring");
+        pour(fromIdx, toIdx);
+        animating = false;
+        render();
+        if (isWin()) {
+          won = true;
+          setTimeout(showWin, 250);
+        }
+      }, pourDurationMs + 40));
+    }, 200));
   }
 
   function showWin() {

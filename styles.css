@@ -31,6 +31,14 @@ html, body {
   padding: 12px 12px 32px;
 }
 
+.site-footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+  padding: 18px 6px 4px;
+  opacity: 0.75;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -161,7 +169,8 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  transition: transform 0.12s ease;
+  transform-origin: 50% 88%;
+  transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .bottle.selected {
@@ -172,12 +181,69 @@ html, body {
   animation: shake 0.35s ease;
 }
 
+.bottle.tilt-right {
+  transform: rotate(66deg) translate(10px, -6px);
+  z-index: 6;
+}
+
+.bottle.tilt-left {
+  transform: rotate(-66deg) translate(-10px, -6px);
+  z-index: 6;
+}
+
+.bottle.pouring .bottle-neck {
+  box-shadow: 0 0 10px 2px rgba(255, 255, 255, 0.35);
+}
+
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   20% { transform: translateX(-6px); }
   40% { transform: translateX(6px); }
   60% { transform: translateX(-4px); }
   80% { transform: translateX(4px); }
+}
+
+/* Liquid stream arcing between bottles while a pour is animating. */
+.pour-stream {
+  position: fixed;
+  width: 5px;
+  border-radius: 3px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 40;
+  transform-origin: 0 0;
+  transition: opacity 0.15s ease;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.45);
+}
+
+.pour-stream.active {
+  opacity: 0.95;
+}
+
+.pour-stream::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 55%);
+}
+
+@keyframes pourUnitExit {
+  from { height: var(--unit-h); opacity: 1; }
+  to { height: 0; opacity: 0.5; }
+}
+
+.pour-unit-exit {
+  animation: pourUnitExit var(--pour-dur, 380ms) ease forwards;
+}
+
+@keyframes pourUnitEnter {
+  from { height: 0; opacity: 0.5; }
+  to { height: var(--unit-h); opacity: 1; }
+}
+
+.pour-unit-enter {
+  animation: pourUnitEnter var(--pour-dur, 380ms) ease forwards;
 }
 
 .bottle-neck {
