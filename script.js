@@ -677,8 +677,12 @@
     undoBtn.disabled = history.length === 0;
   }
 
-  // A known-good solution for the current deal, for automated testing.
-  window.__juiceSortSolution = () => solutionMoves.slice();
+  // A known-good solution for the current deal, for automated testing. Gated
+  // behind ?e2e so it isn't a one-click spoiler sitting in every player's
+  // console -- the game never needs it, only the test harness does.
+  if (new URLSearchParams(window.location.search).has("e2e")) {
+    window.__juiceSortSolution = () => solutionMoves.slice();
+  }
 
   // Start on the menu screen by default.
   showMenu();
