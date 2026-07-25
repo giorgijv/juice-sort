@@ -47,7 +47,8 @@
   // ---------- DOM ----------
   const menuScreen = document.getElementById("menuScreen");
   const gameScreen = document.getElementById("gameScreen");
-  const bottleGrid = document.getElementById("bottleGrid");
+  const leftGrid = document.getElementById("leftGrid");
+  const rightGrid = document.getElementById("rightGrid");
   const longBottleWrap = document.getElementById("longBottleWrap");
   const movesLabel = document.getElementById("movesLabel");
   const difficultyLabel = document.getElementById("difficultyLabel");
@@ -364,8 +365,7 @@
   }
 
   function flashInvalid(idx) {
-    const el = bottleGrid.querySelector(`[data-index="${idx}"]`) ||
-      (longBottleWrap.querySelector(`[data-index="${idx}"]`));
+    const el = document.querySelector(`.bottle[data-index="${idx}"]`);
     if (!el) return;
     el.classList.add("invalid");
     setTimeout(() => el.classList.remove("invalid"), 350);
@@ -664,14 +664,23 @@
   }
 
   function render() {
-    bottleGrid.innerHTML = "";
+    leftGrid.innerHTML = "";
+    rightGrid.innerHTML = "";
     longBottleWrap.innerHTML = "";
+
+    // Small bottles split evenly either side of the centred goal bottle(s),
+    // with the extra one going left when the count is odd.
+    const smallCount = bottles.reduce((n, b) => n + (b.isLong ? 0 : 1), 0);
+    const leftCount = Math.ceil(smallCount / 2);
+    let placed = 0;
+
     bottles.forEach((bottle, idx) => {
       const el = createBottleEl(bottle, idx);
       if (bottle.isLong) {
         longBottleWrap.appendChild(el);
       } else {
-        bottleGrid.appendChild(el);
+        (placed < leftCount ? leftGrid : rightGrid).appendChild(el);
+        placed++;
       }
     });
     undoBtn.disabled = history.length === 0;

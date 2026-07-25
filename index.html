@@ -40,12 +40,14 @@
       </div>
     </section>
 
-    <!-- Game screen -->
+    <!-- Game screen: goal bottle(s) stand in the middle, the small bottles
+         are split into grids either side of them. -->
     <section id="gameScreen" class="screen hidden">
-      <div class="long-bottle-zone">
-        <div id="longBottleWrap"></div>
+      <div class="board">
+        <div id="leftGrid" class="side-grid"></div>
+        <div id="longBottleWrap" class="goal-column"></div>
+        <div id="rightGrid" class="side-grid"></div>
       </div>
-      <div id="bottleGrid" class="bottle-grid"></div>
 
       <div class="controls">
         <button id="undoBtn">↶ Undo</button>

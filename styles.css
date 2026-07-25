@@ -118,25 +118,29 @@ html, body {
 }
 
 /* ---------- Game screen ---------- */
-.long-bottle-zone {
+/* Goal bottle(s) centred, small bottles in a grid to either side. */
+.board {
   display: flex;
+  align-items: center;
   justify-content: center;
-  margin: 6px 0 18px;
+  gap: 26px;
+  flex-wrap: nowrap;
 }
 
-#longBottleWrap {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 0 28px;
+.side-grid {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 20px 14px;
+  justify-items: center;
+  align-items: end;
 }
 
-.bottle-grid {
+.goal-column {
   display: flex;
-  flex-wrap: wrap;
-  gap: 18px 14px;
+  align-items: center;
   justify-content: center;
-  align-content: flex-start;
+  gap: 22px;
+  flex: 0 0 auto;
 }
 
 .controls {
@@ -421,8 +425,24 @@ html, body {
   color: var(--text);
 }
 
+/* Three columns a side stops fitting well before phone widths, so step the
+   side grids down rather than letting the board overflow. */
+@media (max-width: 760px) {
+  .board { gap: 16px; }
+  .side-grid { grid-template-columns: repeat(2, auto); gap: 16px 10px; }
+}
+
 @media (max-width: 480px) {
   .bottle { width: 50px; --unit-h: 18px; }
   .bottle-body { width: 50px; }
-  .bottle.long-bottle .bottle-body { width: 62px; }
+  .bottle.long-bottle { --unit-h: 17px; }
+  .bottle.long-bottle .bottle-body { width: 60px; }
+  .board { gap: 10px; }
+  .side-grid { gap: 14px 8px; }
+  .goal-column { gap: 10px; }
+}
+
+/* Very narrow: a single column of small bottles each side. */
+@media (max-width: 360px) {
+  .side-grid { grid-template-columns: auto; }
 }
