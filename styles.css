@@ -129,7 +129,8 @@ html, body {
 
 .side-grid {
   display: grid;
-  grid-template-columns: repeat(3, auto);
+  /* Column count is set per deal so each side fills whole rows. */
+  grid-template-columns: repeat(var(--side-cols, 3), auto);
   gap: 20px 14px;
   justify-items: center;
   align-items: end;

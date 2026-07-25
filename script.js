@@ -17,15 +17,20 @@
   // Each tier scales three things at once: how much juice each small bottle
   // holds, how many bottles/colors are in play, and (for Expert) how many
   // goal bottles must be filled.
-  // smallColors + buffers is kept EVEN in every tier so the small bottles
-  // split into two equal halves either side of the goal bottle(s).
-  // Iterations set the scramble depth (the difficulty dial), tuned per tier
-  // well short of the point where mixing saturates.
+  // smallColors + buffers is kept a MULTIPLE OF FOUR in every tier, so the
+  // small bottles split into two equal halves AND each half holds an even
+  // number -- which also lets each side lay out as full rows with no ragged
+  // remainder. Two further constraints: buffers must be >= longBottles (each
+  // goal bottle needs an empty to drain into during generation), and
+  // smallColors + longBottles must fit the palette.
+  //
+  // Iterations set the scramble depth -- the difficulty dial -- tuned per
+  // tier well short of the point where mixing saturates.
   const DIFFICULTY = {
     easy:   { smallCapacity: 4, longCapacity: 8,  smallColors: 4, buffers: 4, longBottles: 1, iterations: 60 },
-    medium: { smallCapacity: 5, longCapacity: 10, smallColors: 6, buffers: 4, longBottles: 1, iterations: 130 },
+    medium: { smallCapacity: 5, longCapacity: 10, smallColors: 6, buffers: 2, longBottles: 1, iterations: 240 },
     hard:   { smallCapacity: 6, longCapacity: 12, smallColors: 8, buffers: 4, longBottles: 1, iterations: 180 },
-    expert: { smallCapacity: 6, longCapacity: 12, smallColors: 7, buffers: 3, longBottles: 2, iterations: 240 },
+    expert: { smallCapacity: 6, longCapacity: 12, smallColors: 6, buffers: 2, longBottles: 2, iterations: 320 },
   };
 
   // ---------- State ----------
@@ -685,6 +690,13 @@
         placed++;
       }
     });
+
+    // Pick a column count that divides the side evenly, so each side lays out
+    // as full rows rather than leaving a stray bottle on the last row.
+    const cols = leftCount % 3 === 0 ? 3 : 2;
+    leftGrid.style.setProperty("--side-cols", cols);
+    rightGrid.style.setProperty("--side-cols", cols);
+
     undoBtn.disabled = history.length === 0;
   }
 
