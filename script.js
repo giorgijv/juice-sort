@@ -17,11 +17,13 @@
   // Each tier scales three things at once: how much juice each small bottle
   // holds, how many bottles/colors are in play, and (for Expert) how many
   // goal bottles must be filled.
+  // Iterations run past the point where mixing saturates, so every deal
+  // arrives thoroughly scrambled rather than half-sorted.
   const DIFFICULTY = {
-    easy:   { smallCapacity: 4, longCapacity: 8,  smallColors: 4, buffers: 3, longBottles: 1, iterations: 70 },
-    medium: { smallCapacity: 5, longCapacity: 10, smallColors: 6, buffers: 3, longBottles: 1, iterations: 150 },
-    hard:   { smallCapacity: 6, longCapacity: 12, smallColors: 8, buffers: 3, longBottles: 1, iterations: 240 },
-    expert: { smallCapacity: 6, longCapacity: 12, smallColors: 6, buffers: 3, longBottles: 2, iterations: 280 },
+    easy:   { smallCapacity: 4, longCapacity: 8,  smallColors: 4, buffers: 3, longBottles: 1, iterations: 50 },
+    medium: { smallCapacity: 5, longCapacity: 10, smallColors: 6, buffers: 3, longBottles: 1, iterations: 90 },
+    hard:   { smallCapacity: 6, longCapacity: 12, smallColors: 8, buffers: 3, longBottles: 1, iterations: 130 },
+    expert: { smallCapacity: 6, longCapacity: 12, smallColors: 7, buffers: 3, longBottles: 2, iterations: 130 },
   };
 
   // ---------- State ----------
@@ -37,6 +39,7 @@
   let pendingPourTimeouts = [];
   let activeAnimations = [];
   let activeRaf = 0;
+  let solutionMoves = [];
   // Bumped whenever a pour is superseded (new game, restart, menu). In-flight
   // callbacks compare against it and bail rather than mutating a fresh board.
   let pourToken = 0;
@@ -111,7 +114,7 @@
   // `eligibleD` and pushes it onto some bottle allowed by `eligibleS`. This is
   // always the exact inverse of a real legal forward pour (see `scramble` doc
   // below), restricted to a subset of bottles so callers can control ordering.
-  function reverseStep(list, eligibleD, eligibleS) {
+  function reverseStep(list, eligibleD, eligibleS, record) {
     const n = list.length;
     for (let attempt = 0; attempt < 40; attempt++) {
       const dCandidates = [];
@@ -124,13 +127,10 @@
       const color = dUnits[dUnits.length - 1];
       const run = topRunLengthOf(dUnits);
 
-      let amount;
-      if (run === dUnits.length) {
-        amount = 1 + randInt(run); // whole bottle is one color: any amount is safe
-      } else {
-        if (run < 2) continue; // can't safely peel without exposing a mismatched top
-        amount = 1 + randInt(run - 1);
-      }
+      // Any slice of the top run can be peeled off. Leaving a different colour
+      // exposed underneath is fine, because a forward pour no longer needs a
+      // matching destination -- which is what lets deals get properly mixed.
+      const amount = 1 + randInt(run);
 
       const sCandidates = [];
       for (let j = 0; j < n; j++) {
@@ -148,6 +148,9 @@
       const s = sCandidates[randInt(sCandidates.length)];
 
       for (let a = 0; a < amount; a++) list[s].units.push(list[d].units.pop());
+      // This peel undoes a forward pour of s -> d; replaying the record
+      // backwards therefore solves the deal.
+      if (record) record.push({ from: s, to: d });
       return true;
     }
     return false;
@@ -166,7 +169,7 @@
   //   final act, once nothing else needs sorting.
   //   Phase B scrambles everything else (small bottles + buffers), never
   //   touching the long bottle(s).
-  function scramble(list, iterations) {
+  function scramble(list, iterations, record) {
     // Guarantee every long bottle gets peeled at least once, so none of them
     // can end up already complete before the game even starts.
     list.forEach((b, idx) => {
@@ -176,7 +179,8 @@
       reverseStep(
         list,
         (i) => i === idx,
-        (j) => !list[j].isLong && list[j].units.length === 0
+        (j) => !list[j].isLong && list[j].units.length === 0,
+        record
       );
     });
 
@@ -186,7 +190,8 @@
       reverseStep(
         list,
         (i) => list[i].isLong,
-        (j) => !list[j].isLong && list[j].units.length === 0
+        (j) => !list[j].isLong && list[j].units.length === 0,
+        record
       );
     }
 
@@ -194,7 +199,8 @@
       reverseStep(
         list,
         (i) => !list[i].isLong,
-        (j) => !list[j].isLong
+        (j) => !list[j].isLong,
+        record
       );
     }
     return list;
@@ -223,7 +229,12 @@
     selected = -1;
 
     const { list, iterations } = buildSolvedBottles(diffKey);
-    bottles = scramble(list, iterations);
+    const steps = [];
+    bottles = scramble(list, iterations, steps);
+    // Replaying the scramble backwards is a known-good solution for this deal.
+    // Exposed so automated tests can play a guaranteed-valid game; harmless
+    // otherwise (the puzzle is solvable by construction either way).
+    solutionMoves = steps.slice().reverse().map((s) => [s.from, s.to]);
     longIndices = [];
     bottles.forEach((b, i) => { if (b.isLong) longIndices.push(i); });
     initialBottles = bottles.map((b) => ({ capacity: b.capacity, units: b.units.slice(), isLong: b.isLong, designatedColor: b.designatedColor }));
@@ -665,6 +676,9 @@
     });
     undoBtn.disabled = history.length === 0;
   }
+
+  // A known-good solution for the current deal, for automated testing.
+  window.__juiceSortSolution = () => solutionMoves.slice();
 
   // Start on the menu screen by default.
   showMenu();
