@@ -39,6 +39,29 @@ html, body {
   opacity: 0.75;
 }
 
+.footer-line {
+  display: block;
+}
+
+.footer-line + .footer-line {
+  margin-top: 3px;
+}
+
+.site-footer a {
+  color: var(--text);
+  font-weight: 600;
+  display: inline-block;
+  padding: 8px 4px;
+}
+
+/* Give the link a proper touch target on a phone, without bloating the
+   footer on desktop. */
+@media (pointer: coarse) {
+  .site-footer a {
+    padding: 15px 6px;
+  }
+}
+
 .topbar {
   display: flex;
   align-items: center;
