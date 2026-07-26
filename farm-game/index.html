@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Farm Life</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+
+    <header class="topbar">
+      <h1 class="logo">🚜 Farm Life</h1>
+      <div class="stats">
+        <span id="coinsLabel">💰 0</span>
+        <span id="dayLabel">☀️ Day 1</span>
+      </div>
+    </header>
+
+    <nav class="tabbar">
+      <button class="tab-btn active" data-tab="farm">🌾 Farm</button>
+      <button class="tab-btn" data-tab="animals">🐄 Animals</button>
+      <button class="tab-btn" data-tab="market">🛒 Market</button>
+    </nav>
+
+    <!-- FARM TAB -->
+    <section id="farmTab" class="tab-screen">
+      <div class="seed-bar" id="seedBar"></div>
+      <div class="plots-grid" id="plotsGrid"></div>
+    </section>
+
+    <!-- ANIMALS TAB -->
+    <section id="animalsTab" class="tab-screen hidden">
+      <div class="animal-group">
+        <h2>🐄 Cows</h2>
+        <div class="animal-list" id="cowList"></div>
+        <button class="buy-animal-btn" id="buyCowBtn"></button>
+      </div>
+      <div class="animal-group">
+        <h2>🐔 Chickens</h2>
+        <div class="animal-list" id="chickenList"></div>
+        <button class="buy-animal-btn" id="buyChickenBtn"></button>
+      </div>
+    </section>
+
+    <!-- MARKET TAB -->
+    <section id="marketTab" class="tab-screen hidden">
+      <h2>Sell Goods</h2>
+      <div class="market-list" id="sellList"></div>
+      <h2>Inventory</h2>
+      <div class="inventory-list" id="inventoryList"></div>
+    </section>
+
+    <footer class="site-footer">
+      Farm Life &middot; made by Giorgi Jvarsheishvili &middot; <a href="../index.html">🧃 Play Juice Sort</a>
+    </footer>
+
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
