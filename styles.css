@@ -47,6 +47,11 @@ html, body {
   margin-top: 3px;
 }
 
+/* Keep neighbouring game links from reading as one run of text. */
+.footer-line a + a {
+  margin-left: 10px;
+}
+
 .site-footer a {
   color: var(--text);
   font-weight: 600;
